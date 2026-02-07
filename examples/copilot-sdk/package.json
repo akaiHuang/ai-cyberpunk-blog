@@ -1,0 +1,19 @@
+{
+  "name": "blogsys-copilot-examples",
+  "version": "1.0.0",
+  "description": "BlogSys Copilot SDK 範例集",
+  "type": "module",
+  "scripts": {
+    "basic": "tsx basic-example.ts",
+    "multi-agent": "tsx multi-agent-factory.ts",
+    "all": "tsx basic-example.ts"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "latest",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

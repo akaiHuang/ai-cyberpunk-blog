@@ -1,0 +1,1001 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ArrowLeft, Send, Pin, PinOff, Sparkles, Trash2, Edit2, 
+  Image as ImageIcon, Eye, ChevronRight, X, ChevronUp, ChevronDown,
+  FileText, Loader2, RefreshCw, History, Plus, Download, Upload,
+  Wand2, MessageSquare, Clock, Layers, Type, GripVertical, Copy, Check
+} from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useChat } from '@ai-sdk/react';
+import ReactMarkdown from 'react-markdown';
+import AuthGuard from '@/components/AuthGuard';
+import { BLOG_CATEGORIES } from '@/data/blogData';
+
+// LocalStorage Keys
+const STORAGE_KEYS = {
+  AI_HISTORY: 'botlog_ai_history',
+};
+
+function AIEditorContent() {
+  const router = useRouter();
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  
+  // Canvas 狀態
+  const [pinnedCards, setPinnedCards] = useState([]);
+  const [showCanvas, setShowCanvas] = useState(true);
+  const [editingCardId, setEditingCardId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
+  const [expandedCardId, setExpandedCardId] = useState(null);
+  
+  // 歷史紀錄狀態
+  const [showHistory, setShowHistory] = useState(false);
+  const [aiHistory, setAiHistory] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  
+  // 圖片工具狀態
+  const [showImageTool, setShowImageTool] = useState(false);
+  const [selectedCardForImage, setSelectedCardForImage] = useState(null);
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [referenceImage, setReferenceImage] = useState(null);
+  const [analyzingCard, setAnalyzingCard] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [imageSuggestion, setImageSuggestion] = useState(null);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+  
+  // Input state
+  const [inputValue, setInputValue] = useState('');
+  
+  // AI Chat
+  const { messages, sendMessage, status, error, setMessages } = useChat({
+    api: '/api/chat',
+    onError: (err) => console.error('Chat error:', err),
+  });
+  
+  const isLoading = status === 'streaming' || status === 'submitted';
+
+  // Helper: 提取訊息內容
+  const getMessageContent = (message) => {
+    if (message.parts && Array.isArray(message.parts)) {
+      return message.parts.filter(part => part.type === 'text').map(part => part.text).join('');
+    }
+    return message.content || '';
+  };
+
+  // 載入歷史紀錄
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.AI_HISTORY);
+      if (stored) setAiHistory(JSON.parse(stored));
+    } catch (e) {
+      console.error('Failed to load AI history:', e);
+    }
+  }, []);
+
+  // 自動儲存
+  useEffect(() => {
+    if (messages.length > 0) saveCurrentSession();
+  }, [messages, pinnedCards]);
+
+  // 自動捲動
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // 儲存當前對話
+  const saveCurrentSession = () => {
+    if (messages.length === 0) return;
+    
+    const sessionId = currentSessionId || `session-${Date.now()}`;
+    if (!currentSessionId) setCurrentSessionId(sessionId);
+    
+    const firstUserMessage = messages.find(m => m.role === 'user');
+    const title = firstUserMessage 
+      ? getMessageContent(firstUserMessage).substring(0, 50) + '...'
+      : '新對話';
+    
+    const session = {
+      id: sessionId,
+      title,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: messages.map(m => ({ id: m.id, role: m.role, content: getMessageContent(m) })),
+      canvas: pinnedCards,
+    };
+    
+    setAiHistory(prev => {
+      const existing = prev.findIndex(h => h.id === sessionId);
+      let updated = existing >= 0 
+        ? [...prev.slice(0, existing), session, ...prev.slice(existing + 1)]
+        : [session, ...prev];
+      updated = updated.slice(0, 20);
+      localStorage.setItem(STORAGE_KEYS.AI_HISTORY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // 載入歷史對話
+  const loadSession = (session) => {
+    setMessages(session.messages.map(m => ({ id: m.id, role: m.role, content: m.content })));
+    setPinnedCards(session.canvas || []);
+    setCurrentSessionId(session.id);
+    setShowHistory(false);
+  };
+
+  // 開始新對話
+  const startNewSession = () => {
+    if (messages.length > 0) saveCurrentSession();
+    setMessages([]);
+    setPinnedCards([]);
+    setCurrentSessionId(null);
+    setShowHistory(false);
+  };
+
+  // 刪除歷史紀錄
+  const deleteSession = (sessionId, e) => {
+    e.stopPropagation();
+    setAiHistory(prev => {
+      const updated = prev.filter(h => h.id !== sessionId);
+      localStorage.setItem(STORAGE_KEYS.AI_HISTORY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Pin 訊息
+  const handlePin = (message) => {
+    const content = getMessageContent(message);
+    const newCard = {
+      id: `card-${Date.now()}`,
+      content,
+      createdAt: new Date().toISOString(),
+      image: null,
+      imagePrompt: null,
+    };
+    setPinnedCards(prev => [...prev, newCard]);
+  };
+
+  const isPinned = (messageId) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) return false;
+    return pinnedCards.some(card => card.content === getMessageContent(message));
+  };
+
+  // Canvas 操作
+  const handleDeleteCard = (cardId) => {
+    setPinnedCards(prev => prev.filter(card => card.id !== cardId));
+  };
+
+  const handleEditCard = (card) => {
+    setEditingCardId(card.id);
+    setEditingContent(card.content);
+  };
+
+  const handleSaveEdit = () => {
+    setPinnedCards(prev => prev.map(card => 
+      card.id === editingCardId ? { ...card, content: editingContent } : card
+    ));
+    setEditingCardId(null);
+    setEditingContent('');
+  };
+
+  const moveCard = (cardId, direction) => {
+    setPinnedCards(prev => {
+      const index = prev.findIndex(c => c.id === cardId);
+      if ((direction === 'up' && index === 0) || (direction === 'down' && index === prev.length - 1)) {
+        return prev;
+      }
+      const newCards = [...prev];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      [newCards[index], newCards[targetIndex]] = [newCards[targetIndex], newCards[index]];
+      return newCards;
+    });
+  };
+
+  const duplicateCard = (card) => {
+    const newCard = {
+      ...card,
+      id: `card-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setPinnedCards(prev => {
+      const index = prev.findIndex(c => c.id === card.id);
+      return [...prev.slice(0, index + 1), newCard, ...prev.slice(index + 1)];
+    });
+  };
+
+  // 圖片工具
+  const openImageTool = (card) => {
+    setSelectedCardForImage(card);
+    setImagePrompt(card.imagePrompt || '');
+    setReferenceImage(null);
+    setImageSuggestion(null);
+    setShowImageTool(true);
+  };
+
+  const handleReferenceImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setReferenceImage(ev.target?.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAnalyzeForImage = async () => {
+    if (!selectedCardForImage) return;
+    setAnalyzingCard(true);
+    
+    try {
+      const res = await fetch('/api/analyze-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: selectedCardForImage.content }),
+      });
+      
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      setImageSuggestion(data.suggestion);
+      // 從建議中提取 prompt
+      const promptMatch = data.suggestion.match(/Prompt[^:]*[:：]\s*["\"]?([^"\"]+)["\"]?/i);
+      if (promptMatch) {
+        setImagePrompt(promptMatch[1].trim());
+      }
+    } catch (err) {
+      console.error('Analyze error:', err);
+      alert('分析失敗: ' + err.message);
+    } finally {
+      setAnalyzingCard(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!selectedCardForImage || !imagePrompt.trim()) {
+      alert('請先輸入圖片 Prompt');
+      return;
+    }
+    
+    setGeneratingImage(true);
+    
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: imagePrompt,
+          cardContent: selectedCardForImage.content,
+          referenceImage: referenceImage,
+        }),
+      });
+      
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      setPinnedCards(prev => prev.map(c => 
+        c.id === selectedCardForImage.id 
+          ? { ...c, image: data.imageUrl, imagePrompt: imagePrompt }
+          : c
+      ));
+      
+      setShowImageTool(false);
+    } catch (err) {
+      console.error('Generate error:', err);
+      alert('圖片生成失敗: ' + err.message);
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
+  const copyPromptToClipboard = () => {
+    navigator.clipboard.writeText(imagePrompt);
+    setCopiedPrompt(true);
+    setTimeout(() => setCopiedPrompt(false), 2000);
+  };
+
+  // 預覽發布
+  const handlePreviewPublish = () => {
+    if (pinnedCards.length === 0) {
+      alert('請先 Pin 一些內容到 Canvas');
+      return;
+    }
+
+    saveCurrentSession();
+
+    const firstCard = pinnedCards[0];
+    const firstImageCard = pinnedCards.find(c => c.image);
+    
+    const titleMatch = firstCard.content.match(/^#?\s*(.+?)(?:\n|$)/);
+    const title = titleMatch ? titleMatch[1].replace(/^#+\s*/, '').trim() : '未命名文章';
+    
+    const content = pinnedCards
+      .map(card => {
+        let text = card.content;
+        if (card.image) text += `\n\n![配圖](${card.image})`;
+        return text;
+      })
+      .join('\n\n---\n\n');
+
+    const articleDraft = {
+      title,
+      excerpt: firstCard.content.substring(0, 100) + '...',
+      content,
+      image: firstImageCard?.image || '/blog/demo_1.png',
+      categoryId: BLOG_CATEGORIES[0]?.id || 'ai-lab',
+      tags: ['AI Generated'],
+      status: 'draft',
+    };
+
+    sessionStorage.setItem('ai_article_draft', JSON.stringify(articleDraft));
+    router.push('/admin/blog?from=ai');
+  };
+
+  // 新增空白卡片
+  const addEmptyCard = () => {
+    const newCard = {
+      id: `card-${Date.now()}`,
+      content: '',
+      createdAt: new Date().toISOString(),
+      image: null,
+      imagePrompt: null,
+    };
+    setPinnedCards(prev => [...prev, newCard]);
+    setEditingCardId(newCard.id);
+    setEditingContent('');
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-[#EAEAEA] font-mono">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-black/95 border-b border-[#222] backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+          <Link 
+            href="/admin/blog"
+            className="flex items-center gap-2 text-sm hover:text-[#00FF99] transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            BACK
+          </Link>
+          
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`flex items-center gap-2 text-sm transition-colors ${
+                showHistory ? 'text-[#FF00FF]' : 'hover:text-[#FF00FF]'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span className="hidden sm:inline">HISTORY</span>
+              {aiHistory.length > 0 && (
+                <span className="text-xs bg-[#FF00FF]/20 text-[#FF00FF] px-1.5 rounded">
+                  {aiHistory.length}
+                </span>
+              )}
+            </button>
+            
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#FF00FF]" />
+              <span className="text-xs tracking-widest">
+                BOTLOG<span className="text-[#FF00FF]">_AI</span>
+              </span>
+            </div>
+          </div>
+          
+          <button
+            onClick={() => setShowCanvas(!showCanvas)}
+            className="flex items-center gap-2 text-sm hover:text-[#00FF99] transition-colors"
+          >
+            <Layers className="w-4 h-4" />
+            <span className="hidden sm:inline">CANVAS</span>
+            <ChevronRight className={`w-4 h-4 transition-transform ${showCanvas ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </header>
+
+      {/* History Panel */}
+      <AnimatePresence>
+        {showHistory && (
+          <motion.div
+            initial={{ opacity: 0, x: -320 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -320 }}
+            transition={{ type: 'spring', damping: 25 }}
+            className="fixed left-0 top-14 w-80 h-[calc(100vh-56px)] bg-[#050505] border-r border-[#222] z-40 flex flex-col"
+          >
+            <div className="p-4 border-b border-[#222]">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold flex items-center gap-2">
+                  <History className="w-4 h-4 text-[#FF00FF]" />
+                  HISTORY
+                </h2>
+                <button onClick={() => setShowHistory(false)} className="text-[#555] hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                onClick={startNewSession}
+                className="w-full py-2 border-2 border-[#00FF99] text-[#00FF99] text-xs font-bold hover:bg-[#00FF99] hover:text-black transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-3 h-3" />
+                NEW SESSION
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              {aiHistory.length === 0 ? (
+                <div className="p-4 text-center text-[#555] text-xs">
+                  <Clock className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                  <p>No history yet</p>
+                </div>
+              ) : (
+                aiHistory.map((session) => (
+                  <div
+                    key={session.id}
+                    onClick={() => loadSession(session)}
+                    className={`p-4 border-b border-[#222] cursor-pointer hover:bg-[#111] transition-colors group ${
+                      currentSessionId === session.id ? 'bg-[#111] border-l-2 border-l-[#FF00FF]' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-xs font-bold truncate mb-1">{session.title}</h3>
+                        <div className="flex items-center gap-2 text-[10px] text-[#555]">
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3" />
+                            {session.messages.length}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Layers className="w-3 h-3" />
+                            {session.canvas?.length || 0}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-[#444] mt-1">
+                          {new Date(session.updatedAt).toLocaleDateString('zh-TW')}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => deleteSession(session.id, e)}
+                        className="p-1 text-[#333] hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="pt-14 flex h-[calc(100vh-56px)]">
+        {/* Chat Area */}
+        <div className={`flex-1 flex flex-col transition-all ${showCanvas ? 'mr-96' : ''} ${showHistory ? 'ml-80' : ''}`}>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-2xl mx-auto text-center py-20"
+              >
+                <div className="w-20 h-20 mx-auto mb-6 border-2 border-[#FF00FF] flex items-center justify-center">
+                  <Sparkles className="w-10 h-10 text-[#FF00FF]" />
+                </div>
+                <h1 className="text-2xl font-bold mb-4">
+                  BOTLOG<span className="text-[#FF00FF]">_AI</span>
+                </h1>
+                <p className="text-[#555] mb-8">
+                  AI 創作助手，告訴我你想寫什麼
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {['寫一篇 AI 設計趨勢', '產品發表會文案', 'Web3 對創意產業的影響'].map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setInputValue(s); inputRef.current?.focus(); }}
+                      className="px-4 py-2 text-xs border border-[#333] text-[#888] hover:border-[#FF00FF] hover:text-[#FF00FF] transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                
+                {aiHistory.length > 0 && (
+                  <div className="mt-8 pt-8 border-t border-[#222]">
+                    <p className="text-xs text-[#555] mb-4">Recent sessions:</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {aiHistory.slice(0, 3).map((session) => (
+                        <button
+                          key={session.id}
+                          onClick={() => loadSession(session)}
+                          className="px-4 py-2 text-xs bg-[#111] border border-[#333] text-[#888] hover:border-[#00FF99] hover:text-[#00FF99] transition-colors flex items-center gap-2"
+                        >
+                          <History className="w-3 h-3" />
+                          {session.title.substring(0, 20)}...
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {messages.map((message) => {
+              const content = getMessageContent(message);
+              return (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-[80%] ${message.role === 'user' ? 'order-1' : ''}`}>
+                    <div className={`p-4 ${
+                      message.role === 'user'
+                        ? 'bg-[#00FF99]/10 border border-[#00FF99]/30'
+                        : 'bg-[#111] border border-[#222]'
+                    }`}>
+                      {message.role === 'assistant' ? (
+                        <div className="prose prose-invert prose-sm max-w-none">
+                          <ReactMarkdown>{content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-sm">{content}</p>
+                      )}
+                    </div>
+                    
+                    {message.role === 'assistant' && (
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={() => handlePin(message)}
+                          disabled={isPinned(message.id)}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs transition-colors ${
+                            isPinned(message.id)
+                              ? 'text-[#555] cursor-not-allowed'
+                              : 'text-[#888] hover:text-[#FF00FF]'
+                          }`}
+                        >
+                          {isPinned(message.id) ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+                          {isPinned(message.id) ? 'PINNED' : 'PIN'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+
+            {isLoading && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                <div className="bg-[#111] border border-[#222] p-4">
+                  <div className="flex items-center gap-2 text-[#FF00FF]">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">THINKING...</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 p-4 text-red-400 text-sm">
+                Error: {error.message}
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="border-t border-[#222] p-4">
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (inputValue.trim() && !isLoading) {
+                  sendMessage({ role: 'user', content: inputValue.trim() });
+                  setInputValue('');
+                }
+              }} 
+              className="flex gap-2"
+            >
+              <div className="flex-1 relative">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Ask me anything..."
+                  className="w-full bg-[#111] border border-[#333] px-4 py-3 text-sm placeholder-[#555] focus:outline-none focus:border-[#FF00FF] transition-colors"
+                  disabled={isLoading}
+                />
+                <div className="absolute top-0 left-0 w-2 h-2 border-l border-t border-[#FF00FF]" />
+                <div className="absolute top-0 right-0 w-2 h-2 border-r border-t border-[#FF00FF]" />
+                <div className="absolute bottom-0 left-0 w-2 h-2 border-l border-b border-[#FF00FF]" />
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-r border-b border-[#FF00FF]" />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading || !inputValue.trim()}
+                className="px-6 py-3 border-2 border-[#FF00FF] text-[#FF00FF] font-bold text-sm hover:bg-[#FF00FF] hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                SEND
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Canvas Tool v1.1 */}
+        <AnimatePresence>
+          {showCanvas && (
+            <motion.aside
+              initial={{ x: 384, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 384, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="fixed right-0 top-14 w-96 h-[calc(100vh-56px)] bg-[#050505] border-l border-[#222] flex flex-col"
+            >
+              {/* Canvas Header */}
+              <div className="p-4 border-b border-[#222]">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-bold flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#00FF99]" />
+                    CANVAS TOOL
+                    <span className="text-[10px] text-[#555] font-normal">v1.1</span>
+                  </h2>
+                  <span className="text-xs text-[#555]">{pinnedCards.length} cards</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={addEmptyCard}
+                    className="flex-1 py-2 border border-[#333] text-xs text-[#888] hover:border-[#00FF99] hover:text-[#00FF99] transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Type className="w-3 h-3" />
+                    ADD TEXT
+                  </button>
+                  {pinnedCards.length > 0 && (
+                    <button
+                      onClick={() => setPinnedCards([])}
+                      className="px-3 py-2 border border-[#333] text-xs text-red-500/60 hover:border-red-500 hover:text-red-500 transition-colors"
+                    >
+                      CLEAR
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Cards List */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {pinnedCards.length === 0 ? (
+                  <div className="text-center py-10 text-[#555] text-xs">
+                    <Layers className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="mb-1">Pin AI responses here</p>
+                    <p className="text-[#444]">or add text manually</p>
+                  </div>
+                ) : (
+                  pinnedCards.map((card, index) => (
+                    <motion.div
+                      key={card.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className={`bg-[#0A0A0A] border border-[#222] group relative ${
+                        expandedCardId === card.id ? 'ring-1 ring-[#00FF99]' : ''
+                      }`}
+                    >
+                      {/* Card Header */}
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a1a] bg-[#080808]">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 bg-[#00FF99] text-black text-[10px] font-bold flex items-center justify-center">
+                            {index + 1}
+                          </span>
+                          <span className="text-[10px] text-[#555]">
+                            {card.image ? 'TEXT + IMAGE' : 'TEXT'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => moveCard(card.id, 'up')}
+                            disabled={index === 0}
+                            className="p-1 text-[#444] hover:text-white disabled:opacity-30 transition-colors"
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => moveCard(card.id, 'down')}
+                            disabled={index === pinnedCards.length - 1}
+                            className="p-1 text-[#444] hover:text-white disabled:opacity-30 transition-colors"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => setExpandedCardId(expandedCardId === card.id ? null : card.id)}
+                            className="p-1 text-[#444] hover:text-[#00FF99] transition-colors"
+                          >
+                            <Eye className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Card Content */}
+                      <div className="p-3">
+                        {editingCardId === card.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingContent}
+                              onChange={(e) => setEditingContent(e.target.value)}
+                              className="w-full bg-[#111] border border-[#333] p-2 text-xs resize-none focus:outline-none focus:border-[#00FF99] min-h-[100px]"
+                              rows={6}
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={handleSaveEdit}
+                                className="flex-1 py-1.5 bg-[#00FF99] text-black text-xs font-bold hover:bg-[#00CC7A] transition-colors"
+                              >
+                                SAVE
+                              </button>
+                              <button
+                                onClick={() => setEditingCardId(null)}
+                                className="flex-1 py-1.5 border border-[#333] text-xs hover:bg-[#111] transition-colors"
+                              >
+                                CANCEL
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className={`text-xs text-[#888] ${expandedCardId === card.id ? '' : 'line-clamp-3'}`}>
+                              {card.content || <span className="text-[#444] italic">Empty card - click edit to add content</span>}
+                            </p>
+                            
+                            {/* Image Preview */}
+                            {card.image && (
+                              <div className="mt-3 aspect-video bg-[#111] overflow-hidden relative group/img rounded">
+                                <img src={card.image} alt="" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => openImageTool(card)}
+                                    className="p-2 bg-[#FF00FF] text-black text-xs hover:bg-[#FF00FF]/80 transition-colors"
+                                    title="Edit Image"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                  <a
+                                    href={card.image}
+                                    download
+                                    className="p-2 bg-[#00FF99] text-black text-xs hover:bg-[#00FF99]/80 transition-colors"
+                                    title="Download"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Card Actions */}
+                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#1a1a1a]">
+                              <button
+                                onClick={() => openImageTool(card)}
+                                className="flex items-center gap-1 px-2 py-1 text-[10px] border border-[#333] text-[#666] hover:border-[#FFD700] hover:text-[#FFD700] transition-colors"
+                              >
+                                <ImageIcon className="w-3 h-3" />
+                                {card.image ? 'EDIT IMAGE' : 'ADD IMAGE'}
+                              </button>
+                              
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => duplicateCard(card)}
+                                  className="p-1.5 text-[#444] hover:text-[#00BFFF] transition-colors"
+                                  title="Duplicate"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleEditCard(card)}
+                                  className="p-1.5 text-[#444] hover:text-[#00FF99] transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCard(card.id)}
+                                  className="p-1.5 text-[#444] hover:text-red-500 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+
+              {/* Publish Button */}
+              {pinnedCards.length > 0 && (
+                <div className="p-4 border-t border-[#222]">
+                  <button
+                    onClick={handlePreviewPublish}
+                    className="w-full py-3 bg-gradient-to-r from-[#FF00FF] to-[#00FF99] text-black font-bold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    PREVIEW & PUBLISH
+                  </button>
+                </div>
+              )}
+            </motion.aside>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Image Tool Modal */}
+      <AnimatePresence>
+        {showImageTool && selectedCardForImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowImageTool(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#0A0A0A] border border-[#333] max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-[#222] flex items-center justify-between">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-[#FFD700]" />
+                  IMAGE GENERATOR
+                  <span className="text-[10px] text-[#555] font-normal">Nano Banana Pro</span>
+                </h3>
+                <button
+                  onClick={() => setShowImageTool(false)}
+                  className="text-[#555] hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Card Content Preview */}
+                <div className="bg-[#111] border border-[#222] p-3">
+                  <p className="text-[10px] text-[#555] mb-2">SOURCE CONTENT</p>
+                  <p className="text-xs text-[#888] line-clamp-3">
+                    {selectedCardForImage.content.substring(0, 200)}...
+                  </p>
+                </div>
+
+                {/* AI Analysis Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-[#555]">AI SUGGESTION</p>
+                    <button
+                      onClick={handleAnalyzeForImage}
+                      disabled={analyzingCard}
+                      className="flex items-center gap-1 px-3 py-1 text-[10px] border border-[#333] text-[#00BFFF] hover:border-[#00BFFF] transition-colors disabled:opacity-50"
+                    >
+                      {analyzingCard ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                      ANALYZE
+                    </button>
+                  </div>
+                  {imageSuggestion && (
+                    <div className="bg-[#111] border border-[#222] p-3 max-h-40 overflow-y-auto">
+                      <div className="prose prose-invert prose-xs max-w-none text-xs">
+                        <ReactMarkdown>{imageSuggestion}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Reference Image Upload */}
+                <div>
+                  <p className="text-[10px] text-[#555] mb-2">REFERENCE IMAGE (OPTIONAL)</p>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleReferenceImageUpload}
+                    className="hidden"
+                  />
+                  {referenceImage ? (
+                    <div className="relative aspect-video bg-[#111] overflow-hidden">
+                      <img src={referenceImage} alt="Reference" className="w-full h-full object-contain" />
+                      <button
+                        onClick={() => setReferenceImage(null)}
+                        className="absolute top-2 right-2 p-1 bg-black/80 text-white hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => imageInputRef.current?.click()}
+                      className="w-full py-8 border-2 border-dashed border-[#333] text-[#555] hover:border-[#00FF99] hover:text-[#00FF99] transition-colors flex flex-col items-center gap-2"
+                    >
+                      <Upload className="w-6 h-6" />
+                      <span className="text-xs">Click to upload reference image</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Prompt Editor */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-[#555]">IMAGE PROMPT</p>
+                    <button
+                      onClick={copyPromptToClipboard}
+                      disabled={!imagePrompt}
+                      className="flex items-center gap-1 text-[10px] text-[#555] hover:text-white transition-colors disabled:opacity-30"
+                    >
+                      {copiedPrompt ? <Check className="w-3 h-3 text-[#00FF99]" /> : <Copy className="w-3 h-3" />}
+                      {copiedPrompt ? 'COPIED' : 'COPY'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    placeholder="Describe the image you want to generate..."
+                    className="w-full bg-[#111] border border-[#333] p-3 text-sm resize-none focus:outline-none focus:border-[#FFD700] min-h-[120px] placeholder-[#444]"
+                    rows={5}
+                  />
+                </div>
+
+                {/* Current Image Preview */}
+                {selectedCardForImage.image && (
+                  <div>
+                    <p className="text-[10px] text-[#555] mb-2">CURRENT IMAGE</p>
+                    <div className="aspect-video bg-[#111] overflow-hidden">
+                      <img src={selectedCardForImage.image} alt="Current" className="w-full h-full object-contain" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-[#222] flex gap-2">
+                <button
+                  onClick={() => setShowImageTool(false)}
+                  className="flex-1 py-2.5 border border-[#333] text-sm hover:bg-[#111] transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleGenerateImage}
+                  disabled={generatingImage || !imagePrompt.trim()}
+                  className="flex-1 py-2.5 bg-[#FFD700] text-black font-bold text-sm hover:bg-[#FFD700]/80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {generatingImage ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  GENERATE
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export default function AIEditorPage() {
+  return (
+    <AuthGuard>
+      <AIEditorContent />
+    </AuthGuard>
+  );
+}

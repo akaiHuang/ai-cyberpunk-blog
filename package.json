@@ -1,0 +1,40 @@
+{
+  "name": "blogsys",
+  "version": "1.0.0",
+  "private": true,
+  "description": "可移植的 Blog 系統模組，基於 Next.js + Tailwind CSS",
+  "scripts": {
+    "dev": "next dev",
+    "dev:https": "next dev --experimental-https",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "health-check": "node scripts/health-check.mjs",
+    "health-check:quick": "node scripts/health-check.mjs --skip-build"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^3.0.10",
+    "@ai-sdk/react": "^3.0.47",
+    "ai": "^6.0.45",
+    "clsx": "^2.1.0",
+    "firebase": "^12.8.0",
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^0.469.0",
+    "next": "^16.1.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0",
+    "tailwind-merge": "^2.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@tailwindcss/typography": "^0.5.10",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8",
+    "tailwindcss": "^3.3.0"
+  }
+}
