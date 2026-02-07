@@ -7,7 +7,7 @@ const AuthContext = createContext(null);
 // 預設的管理員帳號密碼 (生產環境建議使用環境變數)
 const ADMIN_CREDENTIALS = {
   username: 'bitlog-admin',
-  password: 'Kevinf123456!!'
+  password: process.env.REACT_APP_ADMIN_PASSWORD || 'CHANGE_ME'
 };
 
 const AUTH_STORAGE_KEY = 'blogsys_auth';

@@ -2,9 +2,13 @@
 
 **Generative AI-Powered CMS -- Where Content Creation Meets Cyberpunk Aesthetics**
 
+## 📋 Quick Summary
+
+> 🌆 **AI Cyberpunk Blog** 是一套融合生成式 AI 與賽博龐克美學的智慧內容管理系統。系統核心是名為 🤖 BotLog AI 的 AI 編輯夥伴，由 Google Gemini 2.0 Flash 驅動，透過 💬 串流對話介面引導創意發想、結構化內容撰寫、SEO 優化建議，並提供 🖼️ AI 圖片分析與生成能力。從腦力激盪到釘選靈感到創意畫布 📌，從 AI 圖像風格分析到一鍵組裝成完整文章 📝，實現全 AI 輔助的編輯工作流程。技術架構採用 ⚡ Next.js 16 + React 19，整合 Vercel AI SDK v6 串接 Gemini，後端使用 🔥 Firebase 全家桶（Auth + Firestore + Storage），前端以 🎭 Framer Motion 打造沉浸式賽博龐克主題動畫介面。內容涵蓋五大主題垂直領域：Wishlist、Our Sense、AI Marketing Lab、Game Labs、OPS Labs 🧪，並配備 🧪 Playwright 端到端測試確保系統穩定。適合追求創作體驗與效率並重的內容創作者 🚀。
+
 ---
 
-## Why This Exists
+## 🤔 Why This Exists
 
 Most blog platforms treat content creation and content management as two separate worlds. You write in one tool, design in another, and manage in a third. The creative process is fragmented.
 
@@ -14,7 +18,7 @@ The system features a full AI-assisted editorial workflow: from brainstorming th
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 +-----------------------------------------------+
@@ -50,7 +54,7 @@ The system features a full AI-assisted editorial workflow: from brainstorming th
                     +---------------------+
 ```
 
-### AI-Powered Features
+### 🤖 AI-Powered Features
 
 | Feature | API Endpoint | Description |
 |---------|-------------|-------------|
@@ -60,7 +64,7 @@ The system features a full AI-assisted editorial workflow: from brainstorming th
 | **Style Analysis** | `/api/analyze-style` | Evaluates visual style and generates matching prompts |
 | **Image Generation** | `/api/generate-image` | Text-to-image and image-to-image generation pipeline |
 
-### Blog Categories
+### 📂 Blog Categories
 
 The blog organizes content across five thematic verticals:
 
@@ -72,7 +76,7 @@ The blog organizes content across five thematic verticals:
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -88,7 +92,7 @@ The blog organizes content across five thematic verticals:
 
 ---
 
-## Quick Start
+## 🏁 Quick Start
 
 ```bash
 # Clone and install
@@ -104,7 +108,7 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-### Available Commands
+### ⚙️ Available Commands
 
 ```bash
 npm run dev          # Start development server
@@ -117,6 +121,6 @@ npm run health-check # Full system health check
 
 ---
 
-## Author
+## 👤 Author
 
 **Huang Akai (Kai)** -- Founder @ Universal FAW Labs | Creative Technologist | Ex-Ogilvy | 15+ years in digital creative and marketing technology.
