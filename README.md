@@ -6,6 +6,10 @@
 
 AI Cyberpunk Blog 是一套結合生成式 AI 與賽博龐克視覺風格的內容管理系統（CMS），把寫作、改寫、排版與發布整合在同一個介面。適合需要快速產出並維持風格一致性的創作者或內容團隊，用於打造具有強烈視覺辨識度的部落格/媒體站。
 
+## About (EN)
+
+AI Cyberpunk Blog is a generative-AI content management system that combines writing automation with a cyberpunk visual identity. It helps creators and editorial teams produce, refine, and publish stylized content from a single workflow.
+
 ## 📋 Quick Summary
 
 > 🌆 **AI Cyberpunk Blog** 是一套融合生成式 AI 與賽博龐克美學的智慧內容管理系統。系統核心是名為 🤖 BotLog AI 的 AI 編輯夥伴，由 Google Gemini 2.0 Flash 驅動，透過 💬 串流對話介面引導創意發想、結構化內容撰寫、SEO 優化建議，並提供 🖼️ AI 圖片分析與生成能力。從腦力激盪到釘選靈感到創意畫布 📌，從 AI 圖像風格分析到一鍵組裝成完整文章 📝，實現全 AI 輔助的編輯工作流程。技術架構採用 ⚡ Next.js 16 + React 19，整合 Vercel AI SDK v6 串接 Gemini，後端使用 🔥 Firebase 全家桶（Auth + Firestore + Storage），前端以 🎭 Framer Motion 打造沉浸式賽博龐克主題動畫介面。內容涵蓋五大主題垂直領域：Wishlist、Our Sense、AI Marketing Lab、Game Labs、OPS Labs 🧪，並配備 🧪 Playwright 端到端測試確保系統穩定。適合追求創作體驗與效率並重的內容創作者 🚀。
